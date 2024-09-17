@@ -6,7 +6,6 @@ from models import CustomCLIPWrapper
 from torchvision.models import resnet50
 from transformers import AutoTokenizer, AutoModel
 
-
 def main(hparams):
     img_encoder = resnet50(pretrained=True)
     img_encoder.fc = torch.nn.Linear(2048, 768)

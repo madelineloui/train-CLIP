@@ -23,8 +23,6 @@ class CLIPWrapper(pl.LightningModule):
             config (dict): A dictionary containing the CLIP instantiation parameters.
         """
         super().__init__()
-        
-        print(config)
 
         self.model_name = model_name
         self.model = CLIP(**config)
@@ -51,6 +49,7 @@ class CLIPWrapper(pl.LightningModule):
             num_devices = max(num_devices, self.trainer.tpu_cores)
 
         effective_batch_size = dataset.batch_size * self.trainer.accumulate_grad_batches * num_devices
+        
         return (dataset_size // effective_batch_size) * self.trainer.max_epochs
 
     # Training loss: https://github.com/openai/CLIP/issues/83
@@ -116,10 +115,7 @@ class CLIPWrapper(pl.LightningModule):
     def validation_step(self, val_batch, idx):
         image, text = val_batch
         image_logits, text_logits = self.forward(image, text)
-        print(image_logits.device)
-        print(text_logits.device)
         ground_truth = torch.arange(len(image_logits)).to(image_logits.device)
-        print(ground_truth.device)
         loss = (F.cross_entropy(image_logits, ground_truth) + F.cross_entropy(text_logits, ground_truth)).div(2)
         self.log('val_loss', loss)
 
@@ -155,7 +151,7 @@ class CLIPWrapper(pl.LightningModule):
             cycle_mult=1.0,
             max_lr=lr,
             min_lr=0,
-            warmup_steps=2000
+            warmup_steps=self.num_training_steps * self.warmup_percent
         )
 
         return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler}
@@ -169,7 +165,8 @@ class CustomCLIPWrapper(CLIPWrapper):
                  model_name='ViT-L/14',
                  learning_rate=3e-3,
                  kl_coeff=1.0,
-                 avg_word_embs=False
+                 avg_word_embs=False,
+                 warmup_percent=0.10
                  ):
         config_dir = 'models/configs/ViT.yaml' if 'ViT' in model_name else 'models/configs/RN.yaml'
         with open(config_dir) as fin:
@@ -182,11 +179,22 @@ class CustomCLIPWrapper(CLIPWrapper):
         self.learning_rate = learning_rate
         self.avg_word_embs = avg_word_embs
         self.sink_temp = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        self.warmup_percent=warmup_percent
         
-        # DEBUG
+        # Unfreeze all layers for full finetune (continual pretrain)
+        for param in self.model.parameters():
+            param.requires_grad = True
+            
+        print()
+        print(self.model.text_projection)
+        print(type(self.model.text_projection))
         '''
         print()
-        print(self.model)
+        for name, param in self.model.named_parameters():
+            if not param.requires_grad:
+                print(f"Layer {name} is frozen.")
+            else:
+                print(f"Layer {name} is trainable.")
         print()
         '''
 
@@ -296,9 +304,16 @@ class CustomCLIPWrapper(CLIPWrapper):
                 sequence_output * inputs["attention_mask"].unsqueeze(-1), dim=1
             ) / torch.clamp(torch.sum(inputs["attention_mask"], dim=1, keepdims=True), min=1e-9)
 
-            return self.txt_projection_layer(embeddings)
+            print('\ndebug')
+            print(self.model.text_projection.shape)
+            print(embeddings.shape)
+            print(self.txt_projection_layer.requires_grad)
+            
+            #return self.txt_projection_layer(embeddings)
+            return embeddings @ self.model.text_projection
         else:
-            return self.txt_projection_layer(self.teacher.transformer(**inputs)[1]) if teacher else self.txt_projection_layer(self.model.transformer(**inputs)[1])
+            #return self.txt_projection_layer(self.teacher.transformer(**inputs)[1]) if teacher else self.txt_projection_layer(self.model.transformer(**inputs)[1])
+            return self.teacher.transformer(**inputs)[1] @ self.model.text_projection if teacher else self.model.transformer(**inputs)[1] @ self.model.text_projection
 
     def compute_similarities(self, I_emb, T_emb):
         sim_ii, sim_tt = I_emb @ I_emb.t(), T_emb @ T_emb.t()
@@ -312,17 +327,8 @@ class CustomCLIPWrapper(CLIPWrapper):
     def ema(self, s, t):
         return s * (1 - 0.999) + t * 0.999
 
-    def forward(self, images, text):
-        print('\nin wrapper forward\n')
-        
-        # Image embedding is the pooler output
-        #encoded_img = self.model.encode_image(images).pooler_output
-        
-        # Project text embedding to match dimension of image embedding
-        #encoded_txt = self.txt_projection_layer(self.encode_text(text))
-        
+    def forward(self, images, text):   
         logits = F.normalize(self.model.encode_image(images), dim=1) @ F.normalize(self.encode_text(text), dim=1).t() * self.model.logit_scale.exp()
-        print(f'logits shape: {logits.shape}\n')
         return logits, logits.t()
 
     # Sourced from: https://github.com/facebookresearch/swav/blob/5e073db0cc69dea22aa75e92bfdd75011e888f28/main_swav.py#L354
@@ -356,7 +362,7 @@ class CustomCLIPWrapper(CLIPWrapper):
             lr=lr,
             momentum=0.9
         )
-
+        
         # Source: https://github.com/openai/CLIP/issues/107
         # Use pip install 'git+https://github.com/katsura-jp/pytorch-cosine-annealing-with-warmup'
         lr_scheduler = CosineAnnealingWarmupRestarts(
@@ -365,7 +371,7 @@ class CustomCLIPWrapper(CLIPWrapper):
             cycle_mult=1.0,
             max_lr=lr,
             min_lr=0,
-            warmup_steps=2000
+            warmup_steps=int(self.num_training_steps * self.warmup_percent)
         )
 
         return {'optimizer': optimizer, 'lr_scheduler': lr_scheduler}

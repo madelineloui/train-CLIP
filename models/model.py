@@ -336,7 +336,6 @@ class CLIP(nn.Module):
         return next(self.visual.parameters()).dtype
 
     def encode_image(self, image):
-        print('\nin model clip encode_image\n')
         return self.visual(image.type(self.dtype)).pooler_output
         
     def encode_text(self, text):
@@ -355,7 +354,6 @@ class CLIP(nn.Module):
         return x
 
     def forward(self, image, text):
-        print('\nin model forward\n')
         image_features = self.encode_image(image)
         text_features = self.encode_text(text)
 

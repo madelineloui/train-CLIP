@@ -12,12 +12,13 @@ import pytorch_lightning as pl
 from transformers import CLIPTokenizer
 
 # TODO: should not be hardcoded?
-tokenizer = CLIPTokenizer.from_pretrained("/home/gridsan/manderson/ovdsat/weights/clip-vit-large-patch14")
+#tokenizer = CLIPTokenizer.from_pretrained("/home/gridsan/manderson/ovdsat/weights/clip-vit-large-patch14")
 
 class FmowDataModule(pl.LightningDataModule):
     def __init__(self, tokenizer, csv_file, caption_type, batch_size=32, num_workers=4, val_split=0.2):
         super().__init__()
-        self.tokenizer = tokenizer
+        global clip_tokenizer
+        clip_tokenizer = tokenizer
         self.csv_file = csv_file
         self.caption_type = caption_type
         self.batch_size = batch_size
@@ -26,7 +27,7 @@ class FmowDataModule(pl.LightningDataModule):
 
     def setup(self, stage=None):
         # Load the full dataset
-        dataset = FmowDataset(csv_path=self.csv_file, tokenizer=self.tokenizer, caption_type=self.caption_type)
+        dataset = FmowDataset(csv_path=self.csv_file, caption_type=self.caption_type)
         
         # Split the dataset into training and validation sets
         val_size = int(len(dataset) * self.val_split)
@@ -108,15 +109,13 @@ class SatelliteDataset(Dataset):
 
 class FmowDataset(SatelliteDataset):
 
-    def __init__(self, csv_path, tokenizer, caption_type=0, transform=None):
+    def __init__(self, csv_path, caption_type=0, transform=None):
         """
         Creates Dataset for regular RGB image classification (usually used for fMoW-RGB dataset).
         :param csv_path: csv_path (string): path to csv file.
         :param transform: pytorch transforms for transforms and tensor conversion.
         """
         super().__init__(in_c=3)
-        
-        self.tokenizer = tokenizer
         
         self.mean = [0.4182007312774658, 0.4214799106121063, 0.3991275727748871]
         self.std = [0.28774282336235046, 0.27541765570640564, 0.2764017581939697]
@@ -130,7 +129,6 @@ class FmowDataset(SatelliteDataset):
         
         self.df = pd.read_csv(csv_path)
         self.image_files = self.df['img_dir'].tolist()
-        #self.captions = self.df['caption'].tolist() 
         self.metadata = self.df.drop(columns=['img_dir', 'caption'])
         
         self.data_len = len(self.df)
@@ -140,10 +138,7 @@ class FmowDataset(SatelliteDataset):
         img_file = self.image_files[idx]
         meta = self.metadata.iloc[idx].to_dict()
 
-        #caption = self.tokenizer(create_fmow_caption(meta, self.caption_type))
         caption = create_fmow_caption(meta, self.caption_type)
-        #for key, value in caption.items():
-        #    caption[key] = torch.tensor(value)
 
         # Process image
         img = Image.open(img_file)
@@ -160,13 +155,8 @@ def custom_collate_fn(batch):
     # Stack images (assuming they are already transformed into tensors)
     images = torch.stack(images, 0)
     
-    # Combine metas (list of dicts) into a single dict of lists
-    #meta_dict = {key: [d[key] for d in metas] for key in metas[0]}
+    # Tokenize captions
+    captions = clip_tokenizer(list(captions), padding=True, truncation=True, return_tensors='pt')
     
-    # Captions can be combined into a list
-    captions = tokenizer(list(captions), padding=True, truncation=True, return_tensors='pt')
-    #for key, value in captions.items():
-    #    captions[key] = torch.tensor(value)
-    
-    #return images, meta_dict, captions
+    #return images, captions
     return images, captions
