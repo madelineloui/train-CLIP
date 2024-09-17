@@ -275,7 +275,7 @@ class CLIP(nn.Module):
                 heads=vision_heads,
                 output_dim=embed_dim
             )
-
+            
         self.transformer = Transformer(
             width=transformer_width,
             layers=transformer_layers,
@@ -332,11 +332,13 @@ class CLIP(nn.Module):
 
     @property
     def dtype(self):
-        return self.visual.conv1.weight.dtype
+        #return self.visual.Conv2d.weight.dtype
+        return next(self.visual.parameters()).dtype
 
     def encode_image(self, image):
-        return self.visual(image.type(self.dtype))
-
+        print('\nin model clip encode_image\n')
+        return self.visual(image.type(self.dtype)).pooler_output
+        
     def encode_text(self, text):
         x = self.token_embedding(text).type(self.dtype)  # [batch_size, n_ctx, d_model]
 
@@ -353,6 +355,7 @@ class CLIP(nn.Module):
         return x
 
     def forward(self, image, text):
+        print('\nin model forward\n')
         image_features = self.encode_image(image)
         text_features = self.encode_text(text)
 

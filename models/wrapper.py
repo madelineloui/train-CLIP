@@ -23,11 +23,16 @@ class CLIPWrapper(pl.LightningModule):
             config (dict): A dictionary containing the CLIP instantiation parameters.
         """
         super().__init__()
+        
+        print(config)
 
         self.model_name = model_name
         self.model = CLIP(**config)
         self.minibatch_size = minibatch_size
         self.isViT = 'ViT' in self.model_name
+        
+        device = 'cuda' if torch.cuda.is_available() else 'cpu'
+        self.txt_projection_layer = nn.Linear(config['transformer_width'], config['vision_width']).to(device)
 
         self.automatic_optimization = False
     
@@ -111,7 +116,10 @@ class CLIPWrapper(pl.LightningModule):
     def validation_step(self, val_batch, idx):
         image, text = val_batch
         image_logits, text_logits = self.forward(image, text)
-        ground_truth = torch.arange(len(image_logits))
+        print(image_logits.device)
+        print(text_logits.device)
+        ground_truth = torch.arange(len(image_logits)).to(image_logits.device)
+        print(ground_truth.device)
         loss = (F.cross_entropy(image_logits, ground_truth) + F.cross_entropy(text_logits, ground_truth)).div(2)
         self.log('val_loss', loss)
 
@@ -158,12 +166,14 @@ class CustomCLIPWrapper(CLIPWrapper):
                  image_encoder,
                  text_encoder,
                  minibatch_size,
+                 model_name='ViT-L/14',
                  learning_rate=3e-3,
                  kl_coeff=1.0,
                  avg_word_embs=False
                  ):
-        with open('models/configs/RN.yaml') as fin:
-            config = yaml.safe_load(fin)['RN50']
+        config_dir = 'models/configs/ViT.yaml' if 'ViT' in model_name else 'models/configs/RN.yaml'
+        with open(config_dir) as fin:
+            config = yaml.safe_load(fin)[model_name]
         super().__init__('RN50', config, minibatch_size)
         del self.model.visual
         del self.model.transformer
@@ -172,6 +182,13 @@ class CustomCLIPWrapper(CLIPWrapper):
         self.learning_rate = learning_rate
         self.avg_word_embs = avg_word_embs
         self.sink_temp = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        
+        # DEBUG
+        '''
+        print()
+        print(self.model)
+        print()
+        '''
 
         # init self-distillation model
         self.teacher = copy.deepcopy(self.model)
@@ -272,15 +289,16 @@ class CustomCLIPWrapper(CLIPWrapper):
 
     def encode_text(self, inputs, teacher=False):
         if self.avg_word_embs:
+        
             sequence_output = self.teacher.transformer(**inputs)[0] if teacher else self.model.transformer(**inputs)[0]
 
             embeddings = torch.sum(
                 sequence_output * inputs["attention_mask"].unsqueeze(-1), dim=1
             ) / torch.clamp(torch.sum(inputs["attention_mask"], dim=1, keepdims=True), min=1e-9)
 
-            return embeddings
+            return self.txt_projection_layer(embeddings)
         else:
-            return self.teacher.transformer(**inputs)[1] if teacher else self.model.transformer(**inputs)[1]
+            return self.txt_projection_layer(self.teacher.transformer(**inputs)[1]) if teacher else self.txt_projection_layer(self.model.transformer(**inputs)[1])
 
     def compute_similarities(self, I_emb, T_emb):
         sim_ii, sim_tt = I_emb @ I_emb.t(), T_emb @ T_emb.t()
@@ -295,7 +313,16 @@ class CustomCLIPWrapper(CLIPWrapper):
         return s * (1 - 0.999) + t * 0.999
 
     def forward(self, images, text):
+        print('\nin wrapper forward\n')
+        
+        # Image embedding is the pooler output
+        #encoded_img = self.model.encode_image(images).pooler_output
+        
+        # Project text embedding to match dimension of image embedding
+        #encoded_txt = self.txt_projection_layer(self.encode_text(text))
+        
         logits = F.normalize(self.model.encode_image(images), dim=1) @ F.normalize(self.encode_text(text), dim=1).t() * self.model.logit_scale.exp()
+        print(f'logits shape: {logits.shape}\n')
         return logits, logits.t()
 
     # Sourced from: https://github.com/facebookresearch/swav/blob/5e073db0cc69dea22aa75e92bfdd75011e888f28/main_swav.py#L354
