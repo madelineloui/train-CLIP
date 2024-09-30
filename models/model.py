@@ -230,7 +230,7 @@ class VisualTransformer(nn.Module):
         x = x.permute(1, 0, 2)  # LND -> NLD
 
         x = self.ln_post(x[:, 0, :])
-
+        
         if self.proj is not None:
             x = x @ self.proj
 
@@ -290,6 +290,8 @@ class CLIP(nn.Module):
 
         self.text_projection = nn.Parameter(torch.empty(transformer_width, embed_dim))
         self.logit_scale = nn.Parameter(torch.ones([]) * np.log(1 / 0.07))
+        
+        #self.visual_projection = nn.Parameter(torch.empty(vision_width, embed_dim))
 
         self.initialize_parameters()
 
@@ -336,7 +338,7 @@ class CLIP(nn.Module):
         return next(self.visual.parameters()).dtype
 
     def encode_image(self, image):
-        return self.visual(image.type(self.dtype)).pooler_output
+        return self.visual.visual_projection(self.visual(image.type(self.dtype)).pooler_output)
         
     def encode_text(self, text):
         x = self.token_embedding(text).type(self.dtype)  # [batch_size, n_ctx, d_model]

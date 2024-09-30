@@ -30,7 +30,7 @@ class CLIPWrapper(pl.LightningModule):
         self.isViT = 'ViT' in self.model_name
         
         device = 'cuda' if torch.cuda.is_available() else 'cpu'
-        self.txt_projection_layer = nn.Linear(config['transformer_width'], config['vision_width']).to(device)
+        #self.txt_projection_layer = nn.Linear(config['transformer_width'], config['vision_width']).to(device)
 
         self.automatic_optimization = False
     
@@ -171,7 +171,7 @@ class CustomCLIPWrapper(CLIPWrapper):
         config_dir = 'models/configs/ViT.yaml' if 'ViT' in model_name else 'models/configs/RN.yaml'
         with open(config_dir) as fin:
             config = yaml.safe_load(fin)[model_name]
-        super().__init__('RN50', config, minibatch_size)
+        super().__init__(model_name, config, minibatch_size)
         del self.model.visual
         del self.model.transformer
         self.model.visual = image_encoder
@@ -184,20 +184,7 @@ class CustomCLIPWrapper(CLIPWrapper):
         # Unfreeze all layers for full finetune (continual pretrain)
         for param in self.model.parameters():
             param.requires_grad = True
-            
-        print()
-        print(self.model.text_projection)
-        print(type(self.model.text_projection))
-        '''
-        print()
-        for name, param in self.model.named_parameters():
-            if not param.requires_grad:
-                print(f"Layer {name} is frozen.")
-            else:
-                print(f"Layer {name} is trainable.")
-        print()
-        '''
-
+        
         # init self-distillation model
         self.teacher = copy.deepcopy(self.model)
         self.kl_coeff = kl_coeff
@@ -294,6 +281,12 @@ class CustomCLIPWrapper(CLIPWrapper):
         self.model.logit_scale.data.clamp_(-np.log(100), np.log(100))
         self.sink_temp.data.clamp_(-np.log(100), np.log(100))
         self.update_teacher()
+     
+    '''
+    def encode_image(self, image):
+        print('wrapper encode image')
+        return self.model.visual_projection @ self.visual(image.type(self.dtype)).pooler_output
+    '''
 
     def encode_text(self, inputs, teacher=False):
         if self.avg_word_embs:
@@ -303,17 +296,10 @@ class CustomCLIPWrapper(CLIPWrapper):
             embeddings = torch.sum(
                 sequence_output * inputs["attention_mask"].unsqueeze(-1), dim=1
             ) / torch.clamp(torch.sum(inputs["attention_mask"], dim=1, keepdims=True), min=1e-9)
-
-            print('\ndebug')
-            print(self.model.text_projection.shape)
-            print(embeddings.shape)
-            print(self.txt_projection_layer.requires_grad)
             
-            #return self.txt_projection_layer(embeddings)
-            return embeddings @ self.model.text_projection
+            return embeddings
         else:
-            #return self.txt_projection_layer(self.teacher.transformer(**inputs)[1]) if teacher else self.txt_projection_layer(self.model.transformer(**inputs)[1])
-            return self.teacher.transformer(**inputs)[1] @ self.model.text_projection if teacher else self.model.transformer(**inputs)[1] @ self.model.text_projection
+            return self.teacher.transformer(**inputs)[1] if teacher else self.model.transformer(**inputs)[1]
 
     def compute_similarities(self, I_emb, T_emb):
         sim_ii, sim_tt = I_emb @ I_emb.t(), T_emb @ T_emb.t()

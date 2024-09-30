@@ -31,6 +31,7 @@ def main(hparams):
     # Using CLIP pretrained model
     model, tokenizer = load_backbone(hparams.backbone)
     img_encoder = model.vision_model
+    img_encoder.visual_projection = model.visual_projection
     txt_encoder = model.text_model
     
     if hparams.minibatch_size < 1:
@@ -44,7 +45,6 @@ def main(hparams):
         batch_size=hparams.minibatch_size, 
         num_workers=hparams.num_workers
     )
-    
 
     # Init custom clip model
     model = CustomCLIPWrapper(
