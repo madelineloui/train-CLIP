@@ -19,19 +19,9 @@ from backbones_utils import load_backbone
 
 def main(hparams):
     
-    '''
-    # Using open_clip pretrained model
-    model, _, _ = open_clip.create_model_and_transforms(hparams.backbone, pretrained=hparams.pretrained)
-    #model.output_tokens = True
-    img_encoder = model.visual
-    txt_encoder = model.transformer
-    tokenizer = open_clip.get_tokenizer(hparams.backbone)
-    '''
-    
     # Using CLIP pretrained model
     model, tokenizer = load_backbone(hparams.backbone)
     img_encoder = model.vision_model
-    img_encoder.visual_projection = model.visual_projection
     txt_encoder = model.text_model
     
     if hparams.minibatch_size < 1:
