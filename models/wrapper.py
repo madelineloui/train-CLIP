@@ -281,12 +281,6 @@ class CustomCLIPWrapper(CLIPWrapper):
         self.model.logit_scale.data.clamp_(-np.log(100), np.log(100))
         self.sink_temp.data.clamp_(-np.log(100), np.log(100))
         self.update_teacher()
-     
-    '''
-    def encode_image(self, image):
-        print('wrapper encode image')
-        return self.model.visual_projection @ self.visual(image.type(self.dtype)).pooler_output
-    '''
 
     def encode_text(self, inputs, teacher=False):
         if self.avg_word_embs:
@@ -297,9 +291,9 @@ class CustomCLIPWrapper(CLIPWrapper):
                 sequence_output * inputs["attention_mask"].unsqueeze(-1), dim=1
             ) / torch.clamp(torch.sum(inputs["attention_mask"], dim=1, keepdims=True), min=1e-9)
             
-            return embeddings
+            return embeddings @ self.model.text_projection
         else:
-            return self.teacher.transformer(**inputs)[1] if teacher else self.model.transformer(**inputs)[1]
+            return self.teacher.transformer(**inputs)[1] @ self.model.text_projection if teacher else self.model.transformer(**inputs)[1] @ self.model.text_projection
 
     def compute_similarities(self, I_emb, T_emb):
         sim_ii, sim_tt = I_emb @ I_emb.t(), T_emb @ T_emb.t()
