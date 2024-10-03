@@ -4,7 +4,57 @@ from codes import CODE2, CODE3, months
 import random
 import requests
 from time import sleep
-#from geopy.geocoders import Nominatim
+import torch
+from transformers import CLIPModel
+from models import CustomCLIPWrapper
+from backbones_utils import load_backbone
+import glob
+
+def custom2clip(model_dir, backbone):
+    clip_model, _ = load_backbone(backbone)
+    clip_keys = list(clip_model.state_dict().keys())
+    print(f'{len(clip_keys)} parameters in model')
+    
+    ckpt_files = glob.glob(f'{model_dir}/*.ckpt')
+    
+    for custom_ckpt in ckpt_files:
+        print(f'Converting {custom_ckpt}...')
+        convert_name = custom_ckpt.split('.')[0]+'_clip.pth'
+
+        # Load custom model parameters
+        ckpt = torch.load(custom_ckpt, map_location='cpu')
+        custom_state_dict = ckpt['state_dict']
+        custom_keys = list(custom_state_dict.keys())
+
+        # Convert custom to clip
+        convert_state_dict = {}
+
+        i = 0
+        for k in clip_keys:
+            parts = k.split('.')
+            if len(parts) <= 2:
+                i+=1
+                custom_name = [name for name in custom_keys if parts[0] in name][0]
+            elif parts[0] == 'text_model':
+                i+=1
+                custom_name = 'model.transformer.'+'.'.join(parts[1:])
+            elif parts[0] == 'vision_model':
+                i+=1
+                custom_name = 'model.visual.'+'.'.join(parts[1:])
+            v = custom_state_dict[custom_name]
+            convert_state_dict[k] = v
+        print(f'{i} parameters converted')
+
+        # Check compatibility
+        ret = clip_model.load_state_dict(convert_state_dict)
+        all_keys_matched = len(ret.missing_keys) == 0 and len(ret.unexpected_keys) == 0
+
+        # If successful, save new state dict
+        if ret:
+            torch.save(convert_state_dict, convert_name)
+            print(f'Saved converted model to {convert_name}')
+        print()
+    
 
 months = {
     1: 'January',

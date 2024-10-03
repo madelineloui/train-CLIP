@@ -10,6 +10,46 @@ from cosine_annealing_warmup import CosineAnnealingWarmupRestarts
 from .model import CLIP
 
 
+def visualize_predictions(images, ground_truths, predictions, epoch, acc, tr_loss, val_loss, save_dir, num_images=10):
+    """
+    Visualizes a batch of images with their ground truth captions and predicted captions.
+    
+    Args:
+    images (torch.Tensor): Batch of images.
+    ground_truths (list): List of ground truth captions.
+    predictions (list): List of predicted captions.
+    epoch (int): Current epoch number.
+    save_dir (str): Directory to save the visualization images.
+    num_images (int): Number of images to visualize.
+    """
+
+    if not os.path.exists(save_dir):
+        os.makedirs(save_dir)
+
+    num_images = min(num_images, len(images))
+    
+    fig, axes = plt.subplots(num_images, 1, figsize=(10, num_images * 3))
+    if num_images == 1:
+        axes = [axes]
+    
+    for idx, ax in enumerate(axes[:num_images]):
+        image = images[idx].permute(1,2,0).cpu().numpy()
+        image = (image - np.min(image)) / (np.max(image) - np.min(image))
+        ax.imshow(image)
+        ax.axis('off')
+        gt_text = ground_truths[idx]
+        p_text = predictions[idx]
+        ax.set_title(f"Ground Truth: {gt_text}\nPrediction: {p_text}", fontsize=6)
+    
+    fig.suptitle(f'Epoch: {epoch}\nTrain loss: {tr_loss}\nVal loss: {val_loss}\nBatch accuracy: {acc}', fontsize=12)
+    
+    fig.tight_layout(rect=[0, 0, 1, 0.98])
+    out_path = os.path.join(save_dir, f'epoch_{epoch}_predictions.png')
+    plt.savefig(out_path)
+    plt.close()
+    print(f'Checkpoint viz saved to {out_path}')
+
+
 class CLIPWrapper(pl.LightningModule):
     def __init__(self,
                  model_name: str,
@@ -60,7 +100,7 @@ class CLIPWrapper(pl.LightningModule):
         optimizer = self.optimizers()
 
         image, text = train_batch
-        n = math.ceil(len(image) // self.minibatch_size)
+        n = max(1, math.ceil(len(image) // self.minibatch_size))
         image_mbs = torch.chunk(image, n)
         text_mbs = torch.chunk(text, n)
 
@@ -117,7 +157,11 @@ class CLIPWrapper(pl.LightningModule):
         image_logits, text_logits = self.forward(image, text)
         ground_truth = torch.arange(len(image_logits)).to(image_logits.device)
         loss = (F.cross_entropy(image_logits, ground_truth) + F.cross_entropy(text_logits, ground_truth)).div(2)
-        self.log('val_loss', loss)
+        acc_i = (torch.argmax(image_logits, 1) == ground_truth).sum()
+        acc_t = (torch.argmax(text_logits, 1) == ground_truth).sum()
+        acc = (acc_i + acc_t) / 2 / len(image)
+        #self.log('val_loss', loss)
+        self.log_dict({'val_loss': loss, 'val_acc': acc})
 
     def configure_optimizers(self):
         lr = {
@@ -194,7 +238,7 @@ class CustomCLIPWrapper(CLIPWrapper):
         optimizer = self.optimizers()
 
         image, text = train_batch
-        n = math.ceil(len(image) // self.minibatch_size)
+        n = max(1, math.ceil(len(image) // self.minibatch_size))
         image_mbs = torch.chunk(image, n)
         text_mbs_ids = torch.chunk(torch.arange(len(image)), n)
 

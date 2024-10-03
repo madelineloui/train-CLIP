@@ -11,15 +11,16 @@ module load anaconda/2023a
 # Activate conda env
 source activate train-clip
 
+EXP_NAME=train
 BACKBONE=clip-14
 MODEL_NAME=ViT-L/14
-CSV_FILE=/home/gridsan/manderson/vlm4rs/fmow/val-small.csv
+CSV_FILE=/home/gridsan/manderson/vlm4rs/fmow/train_latest.csv
 CAPTION_TYPE=0
-BATCH_SIZE=25
+BATCH_SIZE=125
 NUM_WORKERS=16
 WARMUP_PERCENT=0.1
-MODEL_DIR=/home/gridsan/manderson/train-CLIP/run/test
-MAX_EPOCHS=10
+MODEL_DIR=/home/gridsan/manderson/train-CLIP/run
+MAX_EPOCHS=50
 GPUS=1
 
 python train_cp.py \
@@ -30,6 +31,7 @@ python train_cp.py \
     --batch_size ${BATCH_SIZE} \
     --num_workers ${NUM_WORKERS} \
     --warmup_percent ${WARMUP_PERCENT} \
-    --model_dir ${MODEL_DIR} \
+    --model_dir ${MODEL_DIR}/${EXP_NAME} \
     --max_epochs ${MAX_EPOCHS} \
-    --gpus ${GPUS}
+    --gpus ${GPUS} \
+    --exp_name ${EXP_NAME}

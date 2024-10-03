@@ -129,7 +129,7 @@ class FmowDataset(SatelliteDataset):
         
         self.df = pd.read_csv(csv_path)
         self.image_files = self.df['img_dir'].tolist()
-        self.metadata = self.df.drop(columns=['img_dir', 'caption'])
+        self.metadata = self.df.drop(columns=['img_dir'])
         
         self.data_len = len(self.df)
 

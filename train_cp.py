@@ -2,6 +2,7 @@ import torch
 from argparse import ArgumentParser
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.loggers import CSVLogger
 #from data.text_image_dm import TextImageDataModule
 from models import CustomCLIPWrapper
 from torch.utils.data import DataLoader
@@ -10,6 +11,7 @@ from transformers import AutoTokenizer, AutoModel
 from vlm_dataloader import FmowDataModule
 from transformers import CLIPModel, CLIPTokenizer
 from backbones_utils import load_backbone
+from util import custom2clip
 #from vlm_dataloader import FmowDataset, custom_collate_fn
 #import open_clip
 
@@ -56,15 +58,22 @@ def main(hparams):
         save_last=True             # Save the model at the last epoch as well
     )
     
+    # Set up the CSV logger
+    csv_logger = CSVLogger("logs", name=args.exp_name)
+    
     # Init trainer
     trainer = Trainer.from_argparse_args(
         hparams, 
         precision=16, 
-        max_epochs=50,
-        callbacks=[checkpoint_callback]
+        max_epochs=hparams.max_epochs,
+        callbacks=[checkpoint_callback],
+        logger = csv_logger
     )
     
     trainer.fit(model, dm)
+    
+    # Convert ckpts to clip format
+    custom2clip(hparams.model_dir, hparams.backbone)
 
 
 if __name__ == '__main__':
@@ -78,6 +87,7 @@ if __name__ == '__main__':
     parser.add_argument('--num_workers', type=int, default=16)
     parser.add_argument('--warmup_percent', type=float, default=0.10)
     parser.add_argument('--model_dir', type=str, default='/home/gridsan/manderson/train-CLIP/run/test')
+    parser.add_argument('--exp_name', type=str, default='test')
     #parser = TextImageDataModule.add_argparse_args(parser)
     parser = Trainer.add_argparse_args(parser)
     args = parser.parse_args()
