@@ -15,19 +15,21 @@ from transformers import CLIPTokenizer
 #tokenizer = CLIPTokenizer.from_pretrained("/home/gridsan/manderson/ovdsat/weights/clip-vit-large-patch14")
 
 class FmowDataModule(pl.LightningDataModule):
-    def __init__(self, tokenizer, csv_file, caption_type, batch_size=32, num_workers=4, val_split=0.2):
+    def __init__(self, tokenizer, csv_file, rgb_path, caption_type=None, caption_path=None, batch_size=32, num_workers=4, val_split=0.2):
         super().__init__()
         global clip_tokenizer
         clip_tokenizer = tokenizer
         self.csv_file = csv_file
+        self.rgb_path = rgb_path
         self.caption_type = caption_type
+        self.caption_path = caption_path
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.val_split = val_split
 
     def setup(self, stage=None):
         # Load the full dataset
-        dataset = FmowDataset(csv_path=self.csv_file, caption_type=self.caption_type)
+        dataset = FmowDataset(csv_path=self.csv_file, rgb_path=self.rgb_path, caption_type=self.caption_type, caption_path=self.caption_path)
         
         # Split the dataset into training and validation sets
         val_size = int(len(dataset) * self.val_split)
@@ -109,7 +111,7 @@ class SatelliteDataset(Dataset):
 
 class FmowDataset(SatelliteDataset):
 
-    def __init__(self, csv_path, caption_type=0, transform=None):
+    def __init__(self, csv_path, rgb_path, caption_type=None, caption_path=None, transform=None):
         """
         Creates Dataset for regular RGB image classification (usually used for fMoW-RGB dataset).
         :param csv_path: csv_path (string): path to csv file.
@@ -120,7 +122,9 @@ class FmowDataset(SatelliteDataset):
         self.mean = [0.4182007312774658, 0.4214799106121063, 0.3991275727748871]
         self.std = [0.28774282336235046, 0.27541765570640564, 0.2764017581939697]
         
+        self.rgb_path = rgb_path
         self.caption_type = caption_type
+        self.caption_path = caption_path
 
         if transform is None:
             self.transforms = self.build_transform(True, 224, self.mean, self.std)
@@ -128,29 +132,40 @@ class FmowDataset(SatelliteDataset):
             self.transforms = transform
         
         self.df = pd.read_csv(csv_path)
-        self.image_files = self.df['img_dir'].tolist()
-        self.metadata = self.df.drop(columns=['img_dir'])
+        #self.image_files = self.df['img_dir'].tolist()
+        self.metadata = self.df.drop(columns=['img_id'])
         
         self.data_len = len(self.df)
 
     def __getitem__(self, idx):
         
-        img_file = self.image_files[idx]
-        meta = self.metadata.iloc[idx].to_dict()
+        #img_file = self.image_files[idx]
+        #meta = self.metadata.iloc[idx].to_dict()
 
-        caption = create_fmow_caption(meta, self.caption_type)
+        row = self.df.iloc[idx]
+        img_id = row['img_id']
+        cat_id = ('_').join(img_id.split('_')[:-2])
+        short_id = ('_').join(img_id.split('_')[:-1])
+        img_file = f'{self.rgb_path}/{cat_id}/{short_id}/{img_id}_rgb.jpg'
+        
+        if self.caption_type is not None:
+            caption = create_fmow_caption(meta, self.caption_type) 
+        else:
+            gpt_file = f'{self.caption_path}/{cat_id}/{short_id}_gpt-0.txt' ### CHANGE -0 depending on prompt n
+            with open(gpt_file, 'r') as file:
+                caption = file.read()
 
         # Process image
         img = Image.open(img_file)
         img = self.transforms(img)
 
-        return img, meta, caption
+        return img, caption
 
     def __len__(self):
         return self.data_len
 
 def custom_collate_fn(batch):
-    images, metas, captions = zip(*batch)
+    images, captions = zip(*batch)
     
     # Stack images (assuming they are already transformed into tensors)
     images = torch.stack(images, 0)

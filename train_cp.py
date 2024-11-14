@@ -32,8 +32,10 @@ def main(hparams):
     # Init the data module
     dm = FmowDataModule(
         csv_file=hparams.csv_file, 
+        rgb_path=hparams.rgb_dir,
         tokenizer=tokenizer,
         caption_type=hparams.caption_type, 
+        caption_path=hparams.caption_dir, 
         batch_size=hparams.minibatch_size, 
         num_workers=hparams.num_workers
     )
@@ -80,14 +82,16 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--backbone', type=str, default='clip-14')
     parser.add_argument('--model_name', type=str, default='ViT-L/14') #match model/config
-    parser.add_argument('--csv_file', type=str, default='/home/gridsan/manderson/vlm4rs/fmow/val-small.csv')
-    parser.add_argument('--caption_type', type=int, default=0)
+    parser.add_argument('--csv_file', type=str, default='/home/gridsan/manderson/vlm4rs/fmow/fmow-meta/train-latest.csv')
+    parser.add_argument('--rgb_dir', type=str, default='/home/gridsan/manderson/vlm4rs/fmow/fmow-rgb/train')
+    parser.add_argument('--caption_type', type=int, default=None)
+    parser.add_argument('--caption_dir', type=str, default='/home/gridsan/manderson/vlm4rs/fmow/fmow-gpt/train/landmarks-only')
     parser.add_argument('--minibatch_size', type=int, default=0)
     parser.add_argument('--batch_size', type=int, default=50)
     parser.add_argument('--num_workers', type=int, default=16)
     parser.add_argument('--warmup_percent', type=float, default=0.10)
-    parser.add_argument('--model_dir', type=str, default='/home/gridsan/manderson/train-CLIP/run/test')
-    parser.add_argument('--exp_name', type=str, default='test')
+    parser.add_argument('--model_dir', type=str, default='/home/gridsan/manderson/train-CLIP/run')
+    parser.add_argument('--exp_name', type=str, default='gpt_n0')
     #parser = TextImageDataModule.add_argparse_args(parser)
     parser = Trainer.add_argparse_args(parser)
     args = parser.parse_args()

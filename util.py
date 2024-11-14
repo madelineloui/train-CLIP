@@ -9,6 +9,7 @@ from transformers import CLIPModel
 from models import CustomCLIPWrapper
 from backbones_utils import load_backbone
 import glob
+import os
 
 def custom2clip(model_dir, backbone):
     clip_model, _ = load_backbone(backbone)
@@ -19,41 +20,43 @@ def custom2clip(model_dir, backbone):
     
     for custom_ckpt in ckpt_files:
         print(f'Converting {custom_ckpt}...')
-        convert_name = custom_ckpt.split('.')[0]+'_clip.pth'
+        convert_name = custom_ckpt.split('ckpt')[0][:-1] + '_clip.pth'
+        if not os.path.exists(convert_name):
+            # Load custom model parameters
+            ckpt = torch.load(custom_ckpt, map_location='cpu')
+            custom_state_dict = ckpt['state_dict']
+            custom_keys = list(custom_state_dict.keys())
 
-        # Load custom model parameters
-        ckpt = torch.load(custom_ckpt, map_location='cpu')
-        custom_state_dict = ckpt['state_dict']
-        custom_keys = list(custom_state_dict.keys())
+            # Convert custom to clip
+            convert_state_dict = {}
 
-        # Convert custom to clip
-        convert_state_dict = {}
+            i = 0
+            for k in clip_keys:
+                parts = k.split('.')
+                if len(parts) <= 2:
+                    i+=1
+                    custom_name = [name for name in custom_keys if parts[0] in name][0]
+                elif parts[0] == 'text_model':
+                    i+=1
+                    custom_name = 'model.transformer.'+'.'.join(parts[1:])
+                elif parts[0] == 'vision_model':
+                    i+=1
+                    custom_name = 'model.visual.'+'.'.join(parts[1:])
+                v = custom_state_dict[custom_name]
+                convert_state_dict[k] = v
+            print(f'{i} parameters converted')
 
-        i = 0
-        for k in clip_keys:
-            parts = k.split('.')
-            if len(parts) <= 2:
-                i+=1
-                custom_name = [name for name in custom_keys if parts[0] in name][0]
-            elif parts[0] == 'text_model':
-                i+=1
-                custom_name = 'model.transformer.'+'.'.join(parts[1:])
-            elif parts[0] == 'vision_model':
-                i+=1
-                custom_name = 'model.visual.'+'.'.join(parts[1:])
-            v = custom_state_dict[custom_name]
-            convert_state_dict[k] = v
-        print(f'{i} parameters converted')
+            # Check compatibility
+            ret = clip_model.load_state_dict(convert_state_dict)
+            all_keys_matched = len(ret.missing_keys) == 0 and len(ret.unexpected_keys) == 0
 
-        # Check compatibility
-        ret = clip_model.load_state_dict(convert_state_dict)
-        all_keys_matched = len(ret.missing_keys) == 0 and len(ret.unexpected_keys) == 0
-
-        # If successful, save new state dict
-        if ret:
-            torch.save(convert_state_dict, convert_name)
-            print(f'Saved converted model to {convert_name}')
-        print()
+            # If successful, save new state dict
+            if ret:
+                torch.save(convert_state_dict, convert_name)
+                print(f'Saved converted model to {convert_name}')
+            print()
+        else:
+            print('skipping')
     
 
 months = {
