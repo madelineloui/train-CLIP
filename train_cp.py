@@ -36,6 +36,7 @@ def main(hparams):
         tokenizer=tokenizer,
         caption_type=hparams.caption_type, 
         caption_path=hparams.caption_dir, 
+        caption_param=hparams.caption_param,
         batch_size=hparams.minibatch_size, 
         num_workers=hparams.num_workers
     )
@@ -86,6 +87,7 @@ if __name__ == '__main__':
     parser.add_argument('--rgb_dir', type=str, default='/home/gridsan/manderson/vlm4rs/fmow/fmow-rgb/train')
     parser.add_argument('--caption_type', type=int, default=None)
     parser.add_argument('--caption_dir', type=str, default='/home/gridsan/manderson/vlm4rs/fmow/fmow-gpt/train/landmarks-only')
+    parser.add_argument('--caption_param', type=str, default='0')
     parser.add_argument('--minibatch_size', type=int, default=0)
     parser.add_argument('--batch_size', type=int, default=50)
     parser.add_argument('--num_workers', type=int, default=16)

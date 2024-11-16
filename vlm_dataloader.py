@@ -15,7 +15,7 @@ from transformers import CLIPTokenizer
 #tokenizer = CLIPTokenizer.from_pretrained("/home/gridsan/manderson/ovdsat/weights/clip-vit-large-patch14")
 
 class FmowDataModule(pl.LightningDataModule):
-    def __init__(self, tokenizer, csv_file, rgb_path, caption_type=None, caption_path=None, batch_size=32, num_workers=4, val_split=0.2):
+    def __init__(self, tokenizer, csv_file, rgb_path, caption_type=None, caption_path=None, caption_param='', batch_size=32, num_workers=4, val_split=0.2):
         super().__init__()
         global clip_tokenizer
         clip_tokenizer = tokenizer
@@ -23,13 +23,15 @@ class FmowDataModule(pl.LightningDataModule):
         self.rgb_path = rgb_path
         self.caption_type = caption_type
         self.caption_path = caption_path
+        self.caption_param = caption_param
         self.batch_size = batch_size
         self.num_workers = num_workers
         self.val_split = val_split
+        
 
     def setup(self, stage=None):
         # Load the full dataset
-        dataset = FmowDataset(csv_path=self.csv_file, rgb_path=self.rgb_path, caption_type=self.caption_type, caption_path=self.caption_path)
+        dataset = FmowDataset(csv_path=self.csv_file, rgb_path=self.rgb_path, caption_type=self.caption_type, caption_path=self.caption_path, caption_param=self.caption_param)
         
         # Split the dataset into training and validation sets
         val_size = int(len(dataset) * self.val_split)
@@ -111,7 +113,7 @@ class SatelliteDataset(Dataset):
 
 class FmowDataset(SatelliteDataset):
 
-    def __init__(self, csv_path, rgb_path, caption_type=None, caption_path=None, transform=None):
+    def __init__(self, csv_path, rgb_path, caption_type=None, caption_path=None, caption_param='', transform=None):
         """
         Creates Dataset for regular RGB image classification (usually used for fMoW-RGB dataset).
         :param csv_path: csv_path (string): path to csv file.
@@ -125,6 +127,7 @@ class FmowDataset(SatelliteDataset):
         self.rgb_path = rgb_path
         self.caption_type = caption_type
         self.caption_path = caption_path
+        self.caption_param = caption_param
 
         if transform is None:
             self.transforms = self.build_transform(True, 224, self.mean, self.std)
@@ -151,7 +154,7 @@ class FmowDataset(SatelliteDataset):
         if self.caption_type is not None:
             caption = create_fmow_caption(meta, self.caption_type) 
         else:
-            gpt_file = f'{self.caption_path}/{cat_id}/{short_id}_gpt-0.txt' ### CHANGE -0 depending on prompt n
+            gpt_file = f'{self.caption_path}/{cat_id}/{short_id}_gpt-{self.caption_param}.txt'
             with open(gpt_file, 'r') as file:
                 caption = file.read()
 
