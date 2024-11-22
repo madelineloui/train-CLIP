@@ -1,3 +1,8 @@
+### fMoW-mm Continual Pretraining
+
+`python scripts/train_clip.sh`
+
+
 # train-CLIP 📎
 
 A PyTorch Lightning solution to training CLIP from both scratch and fine-tuning.
