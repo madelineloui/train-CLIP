@@ -4,7 +4,7 @@ A PyTorch Lightning solution to training CLIP from both scratch and fine-tuning.
  
 ## Usage 🚂
 
-### (Nov 2024) fMoW-mm Continual Pretraining
+### fMoW-mm Continual Pretraining (Nov 2024)
 
 `python scripts/train_clip.sh`
 
