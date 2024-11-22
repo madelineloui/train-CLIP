@@ -1,13 +1,12 @@
-### fMoW-mm Continual Pretraining
-
-`python scripts/train_clip.sh`
-
-
 # train-CLIP 📎
 
 A PyTorch Lightning solution to training CLIP from both scratch and fine-tuning.
  
 ## Usage 🚂
+
+### (Nov 2024) fMoW-mm Continual Pretraining
+
+`python scripts/train_clip.sh`
 
 ### From Scratch 🌵
 This training setup is easily usable right outside the box! Simply provide a training directory or your own dataset and we've got the rest covered. To train a model just specify a name from the paper name and tell us your training folder and batch size. All possible models can be seen in the yaml files in `models/config`
